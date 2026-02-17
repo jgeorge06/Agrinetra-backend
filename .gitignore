@@ -1,3 +1,7 @@
 serviceAccount.json
 **/serviceAccount.json
 venv/
+db_config.py
+__pycache__/
+*.pyc
+tests/
