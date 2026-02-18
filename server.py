@@ -1,14 +1,12 @@
 from fastapi import FastAPI, Body
 from npk_pipeline import fetch_all_values
 
-app = FastAPI(
-    title="AgriNetra Crop Prediction API",
-    version="1.0"
-)
+app = FastAPI()
+
 
 @app.get("/")
 def home():
-    return {"message": "Backend running successfully"}
+    return {"message": "AgriNetra backend running successfully"}
 
 
 @app.post("/analyze-plot")
@@ -18,14 +16,11 @@ def analyze_plot(data: dict = Body(...)):
     date = data.get("date")
 
     if not coords or not date:
-        return {"error": "coordinates and date required"}
+        return {"error": "Missing input"}
 
     result = fetch_all_values(coords, date)
 
     if result is None:
-        return {"error": "No data found for this area/date"}
+        return {"error": "Failed to fetch data"}
 
-    return {
-        "status": "success",
-        "data": result
-    }
+    return {"status": "success", "data": result}
