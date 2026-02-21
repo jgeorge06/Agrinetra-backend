@@ -1,17 +1,7 @@
 from flask import Blueprint, request, jsonify
-import mysql.connector
-from db_config import db_config
-from datetime import datetime
+from db_utils import get_db
 
 add_crop_bp = Blueprint('add_crop', __name__)
-
-def get_db_connection():
-    try:
-        conn = mysql.connector.connect(**db_config)
-        return conn
-    except mysql.connector.Error as err:
-        print(f"Error connecting to database: {err}")
-        return None
 
 @add_crop_bp.route('/api/add_crop', methods=['POST'])
 def add_crop():
@@ -20,37 +10,45 @@ def add_crop():
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
-    plot_id = data.get('plotid') # Foreign Key
+    plot_id = data.get('pid')          # Foreign Key to Plot Document
     crop_name = data.get('cropname')
-    planting_date = data.get('plantingdate') # YYYY-MM-DD
-    harvest_date = data.get('harvestdate')   # YYYY-MM-DD
+    planting_date = data.get('plantingdate')
+    harvest_date = data.get('harvestdate')
 
     if not all([plot_id, crop_name, planting_date, harvest_date]):
-        return jsonify({"error": "Missing required fields: plotid, cropname, plantingdate, harvestdate"}), 400
+        return jsonify({"error": "Missing required fields"}), 400
 
-    conn = get_db_connection()
-    if not conn:
+    db = get_db()
+    if not db:
         return jsonify({"error": "Database connection failed"}), 500
 
-    cursor = conn.cursor()
-    
     try:
-        # Check if plot exists first (FK constraint)
-        cursor.execute("SELECT pid FROM Plots WHERE pid = %s", (plot_id,))
-        if not cursor.fetchone():
-             return jsonify({"error": f"Plot {plot_id} does not exist"}), 404
-
-        sql = "INSERT INTO Crops (pid, cropname, plantingdate, harvestdate) VALUES (%s, %s, %s, %s)"
-        cursor.execute(sql, (plot_id, crop_name, planting_date, harvest_date))
+        # Save nested within the corresponding Plot document's 'crops' subcollection
+        # db.collection('plots').document(plot_id).collection('crops').add(...)
         
-        conn.commit()
-        return jsonify({"message": f"Crop '{crop_name}' added to plot '{plot_id}' successfully"}), 200
+        # Verify the plot exists first to enforce referential integrity
+        plot_ref = db.collection('plots').document(plot_id)
+        if not plot_ref.get().exists:
+            return jsonify({"error": f"Plot with pid {plot_id} does not exist"}), 404
 
-    except mysql.connector.Error as err:
+        crop_data = {
+            'cropname': crop_name,
+            'plantingdate': planting_date,
+            'harvestdate': harvest_date,
+            'pid': plot_id # Keep the pid on the child for easier reverse querying if ever needed
+        }
+        
+        # Auto-generate a document ID for the crop
+        _, doc_ref = plot_ref.collection('crops').add(crop_data)
+        
+        print(f"Crop '{crop_name}' added successfully to plot '{plot_id}' in Firestore")
+        
+        return jsonify({
+            "message": "Crop added successfully", 
+            "pid": plot_id,
+            "crop_id": doc_ref.id  
+        }), 200
+
+    except Exception as err:
         print(f"Database Error: {err}")
         return jsonify({"error": str(err)}), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()

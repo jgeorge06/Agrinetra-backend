@@ -1,17 +1,8 @@
 from flask import Blueprint, request, jsonify
-import mysql.connector
 import json
-from db_config import db_config
+from db_utils import get_db
 
 edit_plot_bp = Blueprint('edit_plot', __name__)
-
-def get_db_connection():
-    try:
-        conn = mysql.connector.connect(**db_config)
-        return conn
-    except mysql.connector.Error as err:
-        print(f"Error connecting to database: {err}")
-        return None
 
 @edit_plot_bp.route('/api/edit_plot', methods=['PUT'])
 def edit_plot():
@@ -20,55 +11,51 @@ def edit_plot():
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
-    plot_id = data.get('plotid')
-    new_name = data.get('plotname')
-    new_boundaries = data.get('boundaries')
+    plot_id = data.get('plotid')     # required
+    user_id = data.get('userid')     # optional, but good for validation
+    plot_name = data.get('plotname') # optional update
+    boundaries = data.get('boundaries') # optional update
 
     if not plot_id:
-        return jsonify({"error": "Missing plotid"}), 400
-        
-    if not new_name and not new_boundaries:
-        return jsonify({"error": "Nothing to update (provide plotname or boundaries)"}), 400
+        return jsonify({"error": "Missing required field: plotid"}), 400
 
-    conn = get_db_connection()
-    if not conn:
+    db = get_db()
+    if not db:
         return jsonify({"error": "Database connection failed"}), 500
 
-    cursor = conn.cursor()
-    
     try:
-        # Build dynamic SQL
-        updates = []
-        values = []
-
-        if new_name:
-            updates.append("plotname = %s")
-            values.append(new_name)
+        doc_ref = db.collection('plots').document(plot_id)
         
-        if new_boundaries:
-            if isinstance(new_boundaries, (dict, list)):
-                boundaries_json = json.dumps(new_boundaries)
-            else:
-                boundaries_json = new_boundaries
-            updates.append("boundaries = %s")
-            values.append(boundaries_json)
+        # Verify the plot exists and belongs to the user
+        doc = doc_ref.get()
+        if not doc.exists:
+             return jsonify({"error": "Plot not found"}), 404
+             
+        if user_id and doc.to_dict().get("uid") != user_id:
+             return jsonify({"error": "Unauthorized"}), 403
+
+        # Prepare updates
+        update_data = {}
+        if plot_name is not None:
+            update_data['plotname'] = plot_name
             
-        values.append(plot_id)
-        
-        sql = f"UPDATE Plots SET {', '.join(updates)} WHERE pid = %s"
-        
-        cursor.execute(sql, tuple(values))
-        conn.commit()
-        
-        # Even if rowcount is 0, it might just mean no changes were needed. 
-        # We consider this a success for the purpose of the app flow.
-        return jsonify({"message": f"Plot {plot_id} updated successfully (or no changes needed)"}), 200
+        if boundaries is not None:
+            # Firestore can handle lists/dicts directly
+            if isinstance(boundaries, str):
+                try:
+                    boundaries = json.loads(boundaries)
+                except json.JSONDecodeError:
+                    pass
+            update_data['boundaries'] = boundaries
 
-    except mysql.connector.Error as err:
+        if not update_data:
+             return jsonify({"message": "No fields to update"}), 200
+
+        doc_ref.update(update_data)
+        
+        print(f"Plot '{plot_id}' updated successfully in Firestore")
+        return jsonify({"message": "Plot updated successfully", "pid": plot_id}), 200
+
+    except Exception as err:
         print(f"Database Error: {err}")
         return jsonify({"error": str(err)}), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()

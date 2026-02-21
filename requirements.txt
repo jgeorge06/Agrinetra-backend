@@ -15,4 +15,4 @@ google-cloud-storage
 httplib2
 requests
 flask-cors
-mysql-connector-python
+firebase-admin
