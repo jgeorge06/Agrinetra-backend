@@ -1,30 +1,16 @@
 from flask import Flask
+from apscheduler.schedulers.background import BackgroundScheduler
+from engine.background_tasks import run_daily_refresh
+from engine.firestore_listeners import start_firestore_listeners
+import atexit
+
+
 from flask_cors import CORS
-from db_routes.add_plot import add_plot_bp
-from db_routes.fetch_plots import fetch_plots_bp
-from db_routes.delete_plot import delete_plot_bp
-from db_routes.edit_plot import edit_plot_bp
-from db_routes.add_crop import add_crop_bp
-from db_routes.fetch_crops import fetch_crops_bp
-from db_routes.edit_crop import edit_crop_bp
-from db_routes.delete_crop import delete_crop_bp
-from db_routes.fetch_available_crops import fetch_available_crops_bp
 
 app = Flask(__name__)
-CORS(app) # Enable CORS for all routes
-
-# Register Blueprints
-app.register_blueprint(add_plot_bp)
-app.register_blueprint(fetch_plots_bp)
-app.register_blueprint(delete_plot_bp)
-app.register_blueprint(edit_plot_bp)
-app.register_blueprint(add_crop_bp)
-app.register_blueprint(fetch_crops_bp)
-app.register_blueprint(edit_crop_bp)
-app.register_blueprint(delete_crop_bp)
-app.register_blueprint(fetch_available_crops_bp)
-from db_routes.analyze_plot import analyze_plot_bp
-app.register_blueprint(analyze_plot_bp)
+# CORS may no longer be required if there are no HTTP endpoints,
+# but leaving it safe.
+CORS(app)
 
 # -------------------------------------------------
 # Root Check
@@ -38,5 +24,17 @@ if __name__ == '__main__':
     from db_utils import init_db
     init_db()
 
+    # Start Realtime Firestore Listeners
+    listeners = start_firestore_listeners()
+
+    # Start Background Scheduler for Daily Refresh
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(func=run_daily_refresh, trigger="interval", hours=24)
+    scheduler.start()
+
+    # Shut down the scheduler when exiting the app
+    atexit.register(lambda: scheduler.shutdown())
+
     # Run on all interfaces to allow access from emulator/devices
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # use_reloader=False prevents double-spawning threads during development
+    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
