@@ -23,6 +23,8 @@ app.register_blueprint(fetch_crops_bp)
 app.register_blueprint(edit_crop_bp)
 app.register_blueprint(delete_crop_bp)
 app.register_blueprint(fetch_available_crops_bp)
+from db_routes.analyze_plot import analyze_plot_bp
+app.register_blueprint(analyze_plot_bp)
 
 # -------------------------------------------------
 # Root Check

@@ -5,7 +5,7 @@ google-cloud-firestore==2.21.0
 google-auth==2.23.4
 google-auth-oauthlib==1.2.0
 google-cloud-storage==2.14.0
-earthengine-api==0.1.395
+earthengine-api>=1.7.14
 fastapi
 uvicorn
 earthengine-api

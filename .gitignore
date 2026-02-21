@@ -1,4 +1,5 @@
 serviceAccount.json
+firebase-adminsdk.json
 **/serviceAccount.json
 venv/
 db_config.py
