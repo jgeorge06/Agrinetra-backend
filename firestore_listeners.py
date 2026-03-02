@@ -2,7 +2,7 @@ import threading
 import hashlib
 import json
 from db_utils import get_db
-from engine.background_tasks import analyze_and_cache_plot
+from background_tasks import analyze_and_cache_plot
 
 # Keeps track of the last processed boundaries to prevent infinite loops
 # when the backend itself updates the plot document with the 'analysis' field.
@@ -44,8 +44,11 @@ def start_firestore_listeners():
     # but a bare collection_group query works out of the box.
     crops_watch = db.collection_group('crops').on_snapshot(_on_crops_snapshot)
     
+    # Watch Hardware Sensors for live data updates
+    sensors_watch = db.collection('hardware_sensors').on_snapshot(_on_sensors_snapshot)
+    
     # Store references so they don't get garbage collected
-    return plots_watch, crops_watch
+    return plots_watch, crops_watch, sensors_watch
 
 
 def _on_plots_snapshot(col_snapshot, changes, read_time):
@@ -95,4 +98,19 @@ def _on_crops_snapshot(col_snapshot, changes, read_time):
             if parent_plot_ref:
                 plot_id = parent_plot_ref.id
                 print(f"[Listeners] Crop changed. Triggering debounced analysis update for parent Plot: {plot_id}")
+                trigger_analysis_debounced(plot_id)
+
+def _on_sensors_snapshot(col_snapshot, changes, read_time):
+    print(f"[Listeners] Detected {len(changes)} hardware sensor changes.")
+    db = get_db()
+    for change in changes:
+        if change.type.name in ['ADDED', 'MODIFIED']:
+            sensor_id = change.document.id
+            print(f"[Listeners] Hardware Sensor {sensor_id} received new data. Finding dependent plots...")
+            
+            # Find all plots that are using this specific sensor_id
+            plots_ref = db.collection('plots').where('sensor_id', '==', sensor_id).stream()
+            for plot_doc in plots_ref:
+                plot_id = plot_doc.id
+                print(f"[Listeners] Triggering Engine re-analysis for dependent Plot: {plot_id}")
                 trigger_analysis_debounced(plot_id)
