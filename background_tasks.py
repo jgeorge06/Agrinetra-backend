@@ -59,7 +59,7 @@ def analyze_and_cache_plot(plot_id):
         sensor_data = None
         sensor_id = plot_data.get('sensor_id')
         if sensor_id:
-            sensor_doc = db.collection('hardware_sensors').document(sensor_id).get()
+            sensor_doc = db.collection('plots').document(sensor_id).get()
             if sensor_doc.exists:
                 sensor_data = sensor_doc.to_dict()
                 print(f"[Worker] Plot {plot_id} uses Hardware Sensor {sensor_id}.")

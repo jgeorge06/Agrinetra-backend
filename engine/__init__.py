@@ -28,8 +28,33 @@ class AdvancedEngine:
         if sensor_data:
             print("[Engine] Intercepting fetch with Live Sensor hardware data...")
             if "soil" not in env_data: env_data["soil"] = {}
+            if "climate" not in env_data: env_data["climate"] = {}
+            
+            # Find the latest reading by looking at the highest reading_X index
+            latest_reading_idx = -1
+            latest_reading = None
             for key, val in sensor_data.items():
-                env_data["soil"][key] = val
+                if key.startswith("reading_") and isinstance(val, dict):
+                    try:
+                        idx = int(key.split("_")[1])
+                        if idx > latest_reading_idx:
+                            latest_reading_idx = idx
+                            latest_reading = val
+                    except ValueError:
+                        continue
+                        
+            if latest_reading:
+                print(f"[Engine] Using latest sensor reading: reading_{latest_reading_idx}")
+                if "soil_moisture" in latest_reading:
+                    env_data["soil"]["soil_moisture"] = latest_reading["soil_moisture"]
+                if "temperature" in latest_reading:
+                    env_data["climate"]["avg_temp_c"] = latest_reading["temperature"]
+                if "humidity" in latest_reading:
+                    env_data["climate"]["humidity"] = latest_reading["humidity"]
+            else:
+                # Legacy fallback if it's a flat structure
+                for key, val in sensor_data.items():
+                    env_data["soil"][key] = val
         
         print("[Engine] Commencing Agronomic Analysis...")
         analysis_report = self.analyzer.analyze(
